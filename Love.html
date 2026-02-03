@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>The Universe in Your Eyes</title>
+    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Quicksand:wght@300;500;700&display=swap" rel="stylesheet">
+    <style>
+        /* --- RESET & BASIC SETUP --- */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            background-color: #000; /* Hitam Pekat agar Galaxy terlihat */
+            color: #fff;
+            font-family: 'Quicksand', sans-serif;
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+
+        /* --- CANVAS LAYERS (VISUAL ENGINE) --- */
+        canvas {
+            position: absolute;
+            top: 0; left: 0;
+            display: block;
+        }
+
+        #bg-canvas { z-index: 1; } /* Bintang & Hati Jatuh */
+        #fireworks-canvas { z-index: 2; pointer-events: none; } /* Kembang Api */
+        
+        /* --- GLASS CONTAINER (UI) --- */
+        .glass-container {
+            position: relative;
+            z-index: 10; /* Di atas canvas */
+            width: 90%;
+            max-width: 400px;
+            height: 80vh;
+            background: rgba(255, 255, 255, 0.05); /* Lebih transparan */
+            backdrop-filter: blur(8px); /* Blur dikurangi biar background kelihatan */
+            -webkit-backdrop-filter: blur(8px);
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 0 30px rgba(0,0,0,0.8);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 30px 20px;
+            opacity: 0; 
+            transform: scale(0.9);
+            transition: all 1.2s cubic-bezier(0.19, 1, 0.22, 1);
+        }
+        
+        .glass-container.active {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        /* --- 3D HEART AREA --- */
+        .heart-wrapper {
+            width: 150px;
+            height: 150px;
+            margin-bottom: 20px;
+            position: relative;
+            flex-shrink: 0;
+        }
+        #heart3d-canvas {
+            width: 100%;
+            height: 100%;
+            z-index: 11;
+        }
+
+        /* --- TEXT CONTENT --- */
+        .content-area {
+            flex: 1;
+            width: 100%;
+            overflow-y: auto;
+            text-align: center;
+            /* Masking agar teks pudar di atas/bawah */
+            mask-image: linear-gradient(to bottom, transparent, black 10%, black 90%, transparent);
+            -webkit-mask-image: linear-gradient(to bottom, transparent, black 10%, black 90%, transparent);
+            padding: 20px 0;
+            scrollbar-width: none; /* Firefox hide scroll */
+        }
+        .content-area::-webkit-scrollbar { display: none; }
+
+        .line {
+            font-size: 1.1rem;
+            margin-bottom: 12px;
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 0.8s, transform 0.8s;
+            text-shadow: 0 2px 5px rgba(0,0,0,0.8);
+        }
+        .line.visible { opacity: 1; transform: translateY(0); }
+        
+        .romantic-text {
+            color: #ff477e;
+            font-weight: bold;
+            font-size: 1.3rem;
+            text-shadow: 0 0 10px rgba(255, 71, 126, 0.8);
+        }
+        .highlight {
+            font-family: 'Dancing Script', cursive;
+            color: #ff9a9e;
+            font-size: 1.8rem;
+            display: block;
+            margin-top: 15px;
+        }
+
+        /* --- GIFT BOX (KADO) --- */
+        #start-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #050505;
+            z-index: 999;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            transition: opacity 1s;
+        }
+
+        .gift-container {
+            position: relative;
+            width: 100px;
+            height: 100px;
+            cursor: pointer;
+            animation: bounce 2s infinite;
+        }
+        
+        .gift-box {
+            width: 100%; height: 100%;
+            background: linear-gradient(135deg, #e91e63, #9c27b0);
+            border-radius: 10px;
+            box-shadow: 0 0 30px rgba(233, 30, 99, 0.6);
+            position: relative;
+        }
+        .gift-lid {
+            width: 110%; height: 25px;
+            background: #c2185b;
+            position: absolute;
+            top: -10px; left: -5%;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            transition: transform 0.5s;
+        }
+        .ribbon {
+            position: absolute;
+            background: #fff;
+        }
+        .r-vert { width: 15px; height: 100%; left: 42.5%; top: 0; }
+        .r-horz { width: 100%; height: 15px; top: 42.5%; left: 0; }
+        
+        .gift-container.open .gift-lid {
+            transform: translateY(-40px) rotate(-10deg);
+            opacity: 0;
+        }
+        .gift-container.open {
+            animation: shake 0.5s ease-in-out;
+        }
+
+        h1.tap-text {
+            margin-top: 30px;
+            font-size: 1rem;
+            letter-spacing: 3px;
+            animation: pulse 1.5s infinite;
+            text-transform: uppercase;
+        }
+
+        /* --- LYRICS --- */
+        .lyrics-box {
+            margin-top: 30px;
+            border-top: 1px solid rgba(255,255,255,0.2);
+            padding-top: 15px;
+        }
+        .lyrics-line {
+            font-family: 'Dancing Script', cursive;
+            color: #d1c4e9;
+            font-size: 1.4rem;
+            margin: 5px 0;
+        }
+
+        /* --- ANIMATIONS --- */
+        @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+        @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
+        @keyframes shake { 0% { transform: translate(1px, 1px); } 25% { transform: translate(-2px, -2px); } 50% { transform: translate(2px, 2px); } 75% { transform: translate(-2px, 0); } 100% { transform: translate(0, 0); } }
+
+    </style>
+</head>
+<body>
+
+    <canvas id="bg-canvas"></canvas> <canvas id="fireworks-canvas"></canvas> <audio id="bg-audio" src="pamungkas.mp3" loop></audio>
+
+    <div id="start-overlay">
+        <div class="gift-container" id="gift-btn">
+            <div class="gift-box">
+                <div class="ribbon r-vert"></div>
+                <div class="ribbon r-horz"></div>
+                <div class="gift-lid">
+                    <div class="ribbon r-vert" style="height: 100%;"></div>
+                </div>
+            </div>
+        </div>
+        <h1 class="tap-text">Ketuk Untuk Membuka</h1>
+    </div>
+
+    <div class="glass-container" id="main-ui">
+        <div class="heart-wrapper">
+            <canvas id="heart3d-canvas"></canvas>
+        </div>
+        
+        <div class="content-area" id="letter-box"></div>
+    </div>
+
+    <script>
+        /* ================= CONFIGURATION ================= */
+        const config = {
+            name: "Sayang", // Ganti nama
+            autoFireworkChance: 0.03, // 3% chance per frame (Sering muncul)
+            starCount: 150, // Jumlah bintang
+            heartCount: 30  // Jumlah hati jatuh
+        };
+
+        /* ================= GLOBALS ================= */
+        const bgCanvas = document.getElementById('bg-canvas');
+        const bgCtx = bgCanvas.getContext('2d');
+        const fwCanvas = document.getElementById('fireworks-canvas');
+        const fwCtx = fwCanvas.getContext('2d');
+        const h3dCanvas = document.getElementById('heart3d-canvas');
+        const h3dCtx = h3dCanvas.getContext('2d');
+
+        let w, h;
+        let particles = []; // Stars & Hearts
+        let fireworks = [];
+        let heartPoints3D = [];
+        let time = 0;
+
+        /* ================= RESIZE HANDLER ================= */
+        function resize() {
+            w = bgCanvas.width = fwCanvas.width = window.innerWidth;
+            h = bgCanvas.height = fwCanvas.height = window.innerHeight;
+            
+            // 3D Heart size
+            h3dCanvas.width = 150;
+            h3dCanvas.height = 150;
+            
+            initBackground(); // Reset stars on resize
+        }
+        window.addEventListener('resize', resize);
+
+        /* ================= BACKGROUND ENGINE (Stars & Falling Hearts) ================= */
+        class Star {
+            constructor() {
+                this.x = Math.random() * w;
+                this.y = Math.random() * h;
+                this.size = Math.random() * 2;
+                this.blinkSpeed = Math.random() * 0.05;
+                this.alpha = Math.random();
+            }
+            draw() {
+                this.alpha += this.blinkSpeed;
+                if(this.alpha > 1 || this.alpha < 0) this.blinkSpeed *= -1;
+                
+                bgCtx.fillStyle = `rgba(255, 255, 255, ${Math.abs(this.alpha)})`;
+                bgCtx.beginPath();
+                bgCtx.arc(this.x, this.y, this.size, 0, Math.PI*2);
+                bgCtx.fill();
+            }
+        }
+
+        class FallingHeart {
+            constructor() {
+                this.x = Math.random() * w;
+                this.y = Math.random() * -h; // Start above screen
+                this.size = Math.random() * 15 + 10; // Ukuran hati
+                this.speed = Math.random() * 2 + 1;
+                this.color = `hsla(${330 + Math.random()*30}, 100%, 70%, 0.6)`;
+            }
+            draw() {
+                this.y += this.speed;
+                if(this.y > h) this.y = -50; // Reset ke atas
+
+                bgCtx.fillStyle = this.color;
+                bgCtx.beginPath();
+                // Gambar Hati Manual menggunakan Bezier Curve biar bentuknya bagus
+                let topX = this.x;
+                let topY = this.y;
+                let s = this.size;
+                
+                bgCtx.moveTo(topX, topY + s/4);
+                bgCtx.bezierCurveTo(topX, topY, topX - s/2, topY, topX - s/2, topY + s/4);
+                bgCtx.bezierCurveTo(topX - s/2, topY + s/2, topX, topY + s*0.8, topX, topY + s);
+                bgCtx.bezierCurveTo(topX, topY + s*0.8, topX + s/2, topY + s/2, topX + s/2, topY + s/4);
+                bgCtx.bezierCurveTo(topX + s/2, topY, topX, topY, topX, topY + s/4);
+                bgCtx.fill();
+            }
+        }
+
+        function initBackground() {
+            particles = [];
+            for(let i=0; i<config.starCount; i++) particles.push(new Star());
+            for(let i=0; i<config.heartCount; i++) particles.push(new FallingHeart());
+        }
+
+        /* ================= FIREWORKS ENGINE ================= */
+        class Spark {
+            constructor(x, y, hue) {
+                this.x = x; this.y = y;
+                let angle = Math.random() * Math.PI * 2;
+                let speed = Math.random() * 4 + 2;
+                this.vx = Math.cos(angle) * speed;
+                this.vy = Math.sin(angle) * speed;
+                this.life = 1;
+                this.decay = Math.random() * 0.02 + 0.01;
+                this.color = hue;
+                this.gravity = 0.1;
+            }
+            update() {
+                this.vx *= 0.95; // Friction
+                this.vy *= 0.95;
+                this.vy += this.gravity;
+                this.x += this.vx;
+                this.y += this.vy;
+                this.life -= this.decay;
+            }
+            draw() {
+                fwCtx.globalAlpha = this.life;
+                fwCtx.fillStyle = `hsl(${this.color}, 100%, 60%)`;
+                fwCtx.beginPath();
+                fwCtx.arc(this.x, this.y, 2, 0, Math.PI*2);
+                fwCtx.fill();
+            }
+        }
+
+        function spawnFirework(x, y) {
+            let hue = Math.random() * 360;
+            for(let i=0; i<40; i++) {
+                fireworks.push(new Spark(x, y, hue));
+            }
+        }
+
+        /* ================= 3D HEART ENGINE ================= */
+        function initHeart3D() {
+            for(let i=0; i<300; i++) {
+                let t = Math.random() * Math.PI * 2;
+                let r = Math.random(); // volume filler
+                // Heart Formula
+                let x = 16 * Math.pow(Math.sin(t), 3);
+                let y = -(13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t));
+                
+                // Scale & Z
+                x *= 2; y *= 2;
+                let z = (Math.random() - 0.5) * 30; // Thickness
+
+                heartPoints3D.push({x, y, z, baseX: x, baseY: y, baseZ: z});
+            }
+        }
+        initHeart3D();
+
+        function drawHeart3D() {
+            h3dCtx.clearRect(0,0, 150, 150);
+            h3dCtx.save();
+            h3dCtx.translate(75, 75);
+            
+            // Auto Rotate
+            let rot = time * 0.02;
+            
+            h3dCtx.fillStyle = "#ff4081";
+            
+            heartPoints3D.forEach(p => {
+                // Rotate Y
+                let rx = p.baseX * Math.cos(rot) - p.baseZ * Math.sin(rot);
+                let rz = p.baseX * Math.sin(rot) + p.baseZ * Math.cos(rot);
+                
+                // Project 3D to 2D
+                let scale = 200 / (200 + rz); // Perspective
+                let px = rx * scale;
+                let py = p.baseY * scale;
+
+                // Beat Effect
+                let beat = 1 + Math.sin(time * 3) * 0.1; 
+
+                h3dCtx.beginPath();
+                h3dCtx.arc(px * beat, py * beat, 1.5 * scale, 0, Math.PI*2);
+                h3dCtx.fill();
+            });
+            h3dCtx.restore();
+        }
+
+        /* ================= MAIN ANIMATION LOOP ================= */
+        function animate() {
+            time += 0.05;
+            
+            // 1. Clean Canvas
+            bgCtx.clearRect(0,0,w,h);
+            fwCtx.clearRect(0,0,w,h);
+
+            // 2. Draw Stars & Falling Hearts
+            particles.forEach(p => p.draw());
+
+            // 3. Draw Fireworks
+            for(let i=fireworks.length-1; i>=0; i--) {
+                fireworks[i].update();
+                fireworks[i].draw();
+                if(fireworks[i].life <= 0) fireworks.splice(i, 1);
+            }
+
+            // 4. Random Auto Fireworks (Continuous)
+            if(Math.random() < config.autoFireworkChance) {
+                spawnFirework(Math.random()*w, Math.random()*h/2);
+            }
+
+            // 5. Draw 3D Heart
+            drawHeart3D();
+
+            requestAnimationFrame(animate);
+        }
+
+        /* ================= GAME LOGIC (Opening) ================= */
+        const overlay = document.getElementById('start-overlay');
+        const giftBtn = document.getElementById('gift-btn');
+        const mainUi = document.getElementById('main-ui');
+        const audio = document.getElementById('bg-audio');
+        const letterBox = document.getElementById('letter-box');
+
+        resize(); // Setup awal
+        animate(); // Mulai animasi background segera (meski ada overlay)
+
+        giftBtn.addEventListener('click', () => {
+            // 1. Animasi Buka Kado
+            giftBtn.classList.add('open');
+            
+            // 2. Mainkan Audio
+            audio.play().catch(e => console.log("Audio perlu interaksi user lagi"));
+
+            // 3. Ledakan Kembang Api Besar
+            spawnFirework(w/2, h/2);
+            setTimeout(() => spawnFirework(w/2 - 100, h/2 - 50), 200);
+            setTimeout(() => spawnFirework(w/2 + 100, h/2 - 50), 400);
+
+            // 4. Hide Overlay & Show UI
+            setTimeout(() => {
+                overlay.style.opacity = '0';
+                setTimeout(() => {
+                    overlay.style.display = 'none';
+                    mainUi.classList.add('active');
+                    startTyping();
+                }, 1000);
+            }, 800);
+        });
+
+        /* ================= TYPING & LYRICS LOGIC ================= */
+        const messages = [
+            `Hai, <span class="romantic-text">${config.name}</span>`,
+            "Mungkin aku tidak sering mengatakannya,",
+            "Tapi di antara jutaan bintang...",
+            "Kaulah satu-satunya yang paling bersinar.",
+            "Terima kasih sudah menjadi bagian dari semestaku.",
+            "<span class='highlight'>I Love You Forever</span>"
+        ];
+
+        const lyrics = [
+            "♪ Cause I love you...",
+            "♪ But I'm letting go...",
+            "♪ Walau berat hati...",
+            "♪ Asal kau bahagia..."
+        ];
+
+        async function startTyping() {
+            // Typing Messages
+            for(let i=0; i<messages.length; i++) {
+                let p = document.createElement('p');
+                p.className = 'line';
+                p.innerHTML = messages[i];
+                letterBox.appendChild(p);
+                
+                // Trigger reflow & animate
+                void p.offsetWidth;
+                p.classList.add('visible');
+
+                // Auto Scroll
+                letterBox.scrollTop = letterBox.scrollHeight;
+
+                await new Promise(r => setTimeout(r, 2000));
+            }
+
+            // Typing Lyrics (Setelah pesan selesai)
+            let divLyrics = document.createElement('div');
+            divLyrics.className = 'lyrics-box';
+            letterBox.appendChild(divLyrics);
+
+            for(let l of lyrics) {
+                let p = document.createElement('p');
+                p.className = 'lyrics-line line';
+                p.innerText = l;
+                divLyrics.appendChild(p);
+                void p.offsetWidth;
+                p.classList.add('visible');
+                letterBox.scrollTop = letterBox.scrollHeight;
+                await new Promise(r => setTimeout(r, 3500)); // Sesuai tempo lagu
+            }
+        }
+    </script>
+</body>
+</html>
